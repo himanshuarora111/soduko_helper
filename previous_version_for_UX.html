@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sudoku Logical Solver</title>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            text-align: center;
+            background: #f4f6f8;
+        }
+
+        h2 {
+            margin-top: 20px;
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(9, 50px);
+            grid-template-rows: repeat(9, 50px);
+            margin: 20px auto;
+            width: fit-content;
+        }
+
+        input {
+            width: 48px;
+            height: 48px;
+            text-align: center;
+            font-size: 20px;
+            border: 1px solid #999;
+            outline: none;
+        }
+
+        input:focus {
+            background-color: #e6f2ff;
+        }
+
+        /* 3x3 bold borders */
+        .right-border { border-right: 3px solid black; }
+        .bottom-border { border-bottom: 3px solid black; }
+        .top-border { border-top: 3px solid black; }
+        .left-border { border-left: 3px solid black; }
+
+        button {
+            padding: 10px 18px;
+            margin: 5px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .invalid {
+            color: red;
+            font-weight: bold;
+        }
+
+        .auto-filled {
+            color: green;
+            font-weight: bold;
+        }
+
+        .user-added {
+            color: blue;
+            font-weight: bold;
+        }
+
+        .initial {
+            color: black;
+            font-weight: bold;
+        }
+
+    </style>
+</head>
+<body>
+
+<h2>Sudoku Logical Solver</h2>
+
+<button onclick="createBoard()">Input</button>
+<button onclick="solveSudoku()">Run</button>
+<button onclick="solveSudoku()">Re-Run</button>
+<button onclick="clearBoard()">Clear</button>
+
+<div id="board"></div>
+
+<script>
+
+let initialMode = true;
+
+function createBoard() {
+    const board = document.getElementById("board");
+    board.innerHTML = "";
+    initialMode = true;
+
+    for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+
+            const cell = document.createElement("input");
+            cell.type = "text";
+            cell.maxLength = 1;
+            cell.dataset.row = r;
+            cell.dataset.col = c;
+
+            // 3x3 borders
+            if (r % 3 === 0) cell.classList.add("top-border");
+            if (c % 3 === 0) cell.classList.add("left-border");
+            if ((c + 1) % 3 === 0) cell.classList.add("right-border");
+            if ((r + 1) % 3 === 0) cell.classList.add("bottom-border");
+
+            cell.addEventListener("input", validateInput);
+
+            board.appendChild(cell);
+        }
+    }
+}
+
+function validateInput(e) {
+    let cell = e.target;
+    let value = cell.value;
+
+    cell.classList.remove("invalid", "user-added");
+
+    if (value === "") {
+        revalidateAll();
+        return;
+    }
+
+    if (!/^[1-9]$/.test(value)) {
+        cell.value = "";
+        return;
+    }
+
+    let row = parseInt(cell.dataset.row);
+    let col = parseInt(cell.dataset.col);
+
+    let board = getBoard();
+
+    if (!isValid(board, row, col, parseInt(value))) {
+        cell.classList.add("invalid");
+    } else {
+        if (!initialMode) {
+            cell.classList.add("user-added");
+        }
+    }
+
+    revalidateAll();
+}
+
+function revalidateAll() {
+    let board = getBoard();
+    let cells = document.querySelectorAll("#board input");
+
+    cells.forEach(cell => {
+
+        let value = cell.value;
+        cell.classList.remove("invalid");
+
+        if (value === "") return;
+
+        let row = parseInt(cell.dataset.row);
+        let col = parseInt(cell.dataset.col);
+
+        if (!isValid(board, row, col, parseInt(value))) {
+            cell.classList.add("invalid");
+        }
+    });
+}
+
+function getBoard() {
+    let inputs = document.querySelectorAll("#board input");
+    let board = Array.from({length: 9}, () => Array(9).fill(0));
+
+    inputs.forEach(cell => {
+        let r = cell.dataset.row;
+        let c = cell.dataset.col;
+        let val = cell.value;
+        board[r][c] = val === "" ? 0 : parseInt(val);
+    });
+
+    return board;
+}
+
+function isValid(board, row, col, num) {
+
+    for (let i = 0; i < 9; i++) {
+        if (i !== col && board[row][i] === num) return false;
+        if (i !== row && board[i][col] === num) return false;
+    }
+
+    let startRow = Math.floor(row/3)*3;
+    let startCol = Math.floor(col/3)*3;
+
+    for (let r = startRow; r < startRow+3; r++) {
+        for (let c = startCol; c < startCol+3; c++) {
+            if ((r !== row || c !== col) && board[r][c] === num) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+function getCandidates(board, row, col) {
+    if (board[row][col] !== 0) return [];
+
+    let candidates = [];
+
+    for (let n = 1; n <= 9; n++) {
+        if (isValid(board, row, col, n)) {
+            candidates.push(n);
+        }
+    }
+
+    return candidates;
+}
+
+function solveSudoku() {
+    initialMode = false;
+
+    // mark existing numbers as initial (black)
+    document.querySelectorAll("#board input").forEach(cell => {
+        if (cell.value !== "" && 
+            !cell.classList.contains("auto-filled") &&
+            !cell.classList.contains("user-added")) {
+            cell.classList.add("initial");
+        }
+    });
+
+    let board = getBoard();
+    let changed = true;
+
+    while (changed) {
+        changed = false;
+
+        // Rule 1: Naked Single
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                if (board[r][c] === 0) {
+                    let candidates = getCandidates(board, r, c);
+                    if (candidates.length === 1) {
+                        board[r][c] = candidates[0];
+                        updateCell(r, c, candidates[0], true);
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        // Rule 2: Hidden Single
+        for (let num = 1; num <= 9; num++) {
+
+            // Rows
+            for (let r = 0; r < 9; r++) {
+                let spots = [];
+                for (let c = 0; c < 9; c++) {
+                    if (board[r][c] === 0 && getCandidates(board, r, c).includes(num)) {
+                        spots.push(c);
+                    }
+                }
+                if (spots.length === 1) {
+                    board[r][spots[0]] = num;
+                    updateCell(r, spots[0], num, true);
+                    changed = true;
+                }
+            }
+
+            // Columns
+            for (let c = 0; c < 9; c++) {
+                let spots = [];
+                for (let r = 0; r < 9; r++) {
+                    if (board[r][c] === 0 && getCandidates(board, r, c).includes(num)) {
+                        spots.push(r);
+                    }
+                }
+                if (spots.length === 1) {
+                    board[spots[0]][c] = num;
+                    updateCell(spots[0], c, num, true);
+                    changed = true;
+                }
+            }
+
+            // Blocks
+            for (let br = 0; br < 3; br++) {
+                for (let bc = 0; bc < 3; bc++) {
+
+                    let spots = [];
+
+                    for (let r = br*3; r < br*3+3; r++) {
+                        for (let c = bc*3; c < bc*3+3; c++) {
+                            if (board[r][c] === 0 && getCandidates(board, r, c).includes(num)) {
+                                spots.push([r,c]);
+                            }
+                        }
+                    }
+
+                    if (spots.length === 1) {
+                        let [r,c] = spots[0];
+                        board[r][c] = num;
+                        updateCell(r,c,num,true);
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+}
+
+function updateCell(r,c,value,auto=false) {
+    let cell = document.querySelector(`input[data-row='${r}'][data-col='${c}']`);
+    cell.value = value;
+    cell.classList.remove("invalid");
+    if (auto) {
+        cell.classList.add("auto-filled");
+    } else {
+        cell.classList.add("user-added");
+    }
+}
+
+function clearBoard() {
+    createBoard();
+}
+
+createBoard();
+
+</script>
+
+</body>
+</html>
