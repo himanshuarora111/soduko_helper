@@ -1,22 +1,29 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Advanced Sudoku Logical Solver - Fixed</title>
+<title>Advanced Sudoku Logical Solver</title>
 <style>
     body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #f4f6f8; }
     #status { font-weight: bold; margin-top: 10px; }
-    #board { display: grid; grid-template-columns: repeat(9, 60px); grid-template-rows: repeat(9, 60px); margin: 20px auto; width: 540px; }
+    #board { display: grid; grid-template-columns: repeat(9, 60px); grid-template-rows: repeat(9, 60px); margin: 20px auto; width: 540px; border: 2px solid black; }
     .cell { position: relative; border: 1px solid #999; transition: background 0.2s; background: white; }
     .big-input { width: 100%; height: 100%; font-size: 22px; text-align: center; border: none; outline: none; background: transparent; }
     .mini-grid { display: grid; grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr); width:100%; height:100%; font-size:11px; color:#777; cursor:pointer; }
     .mini-grid div { display:flex; align-items:center; justify-content:center; }
     .lock-badge { position:absolute; top:2px; right:4px; font-size:10px; font-weight:bold; color:#d35400; }
     .selected { outline:3px solid orange; z-index: 10; }
+    
+    /* BORDER LOGIC */
     .right-border { border-right:3px solid black; }
     .bottom-border { border-bottom:3px solid black; }
     .top-border { border-top:3px solid black; }
     .left-border { border-left:3px solid black; }
-    .auto-filled { color:green; font-weight:bold; }
+
+    /* COLOR SCHEME */
+    .initial-input { color: black; font-weight: bold; }
+    .auto-filled { color: green; font-weight: bold; }
+    .manual-after-solve { color: blue; font-weight: bold; }
+
     button { padding:10px 18px; margin:5px; font-size:15px; border:none; border-radius:5px; cursor:pointer; background:#007bff; color:white; }
     button:hover { background:#0056b3; }
     .active-group { background:#8e44ad !important; }
@@ -42,6 +49,7 @@
 let miniMode=false;
 let groupMode=false;
 let lockMode=false;
+let solverHasRun=false; // Track if solver was triggered
 let selectedCells=[];
 let manualGroups=[];
 let digitLocks=[];
@@ -67,7 +75,7 @@ function createBoard(){
     const boardDiv = document.getElementById("board");
     boardDiv.innerHTML="";
     manualGroups=[]; digitLocks=[]; selectedCells=[]; colorIndex=0;
-    miniMode=false; groupMode=false; lockMode=false;
+    miniMode=false; groupMode=false; lockMode=false; solverHasRun=false;
     updateStatus();
 
     for(let r=0;r<9;r++){
@@ -142,20 +150,25 @@ function confirmLock(){
 
 function solveSudoku(){
     miniMode=true;
-    let board=getBoard();
+    let data=getBoardData(); // Returns { board, meta }
+    let board = data.board;
+    let meta = data.meta;
     let changed=true;
+    
     while(changed){
         changed=false;
-        // Naked Singles
         for(let r=0;r<9;r++){
             for(let c=0;c<9;c++){
                 if(board[r][c]===0){
                     let cand=getCandidates(board,r,c);
-                    if(cand.length===1){ board[r][c]=cand[0]; changed=true; }
+                    if(cand.length===1){ 
+                        board[r][c]=cand[0]; 
+                        meta[r][c]="auto"; // Mark as solved by logic
+                        changed=true; 
+                    }
                 }
             }
         }
-        // Hidden Singles
         for(let num=1; num<=9; num++){
             for(let i=0; i<9; i++){
                 let rSpots=[], cSpots=[], bSpots=[];
@@ -165,13 +178,14 @@ function solveSudoku(){
                     let br=Math.floor(i/3)*3 + Math.floor(j/3), bc=(i%3)*3 + (j%3);
                     if(board[br][bc]===0 && getCandidates(board,br,bc).includes(num)) bSpots.push([br,bc]);
                 }
-                if(rSpots.length===1){ board[i][rSpots[0]]=num; changed=true; }
-                if(cSpots.length===1){ board[cSpots[0]][i]=num; changed=true; }
-                if(bSpots.length===1){ board[bSpots[0][0]][bSpots[0][1]]=num; changed=true; }
+                if(rSpots.length===1){ board[i][rSpots[0]]=num; meta[i][rSpots[0]]="auto"; changed=true; }
+                if(cSpots.length===1){ board[cSpots[0]][i]=num; meta[cSpots[0]][i]="auto"; changed=true; }
+                if(bSpots.length===1){ board[bSpots[0][0]][bSpots[0][1]]=num; meta[bSpots[0][0]][bSpots[0][1]]="auto"; changed=true; }
             }
         }
     }
-    updateUI(board);
+    solverHasRun = true; 
+    updateUI(board, meta);
 }
 
 function getCandidates(board,row,col){
@@ -184,12 +198,10 @@ function getCandidates(board,row,col){
         if(g.cells.includes(key)){
             list=list.filter(x=>g.digits.includes(x));
         } else {
-            // Check primary unit
             let sameUnit = (g.unitType==="row" && row===g.unitIndex) || 
                            (g.unitType==="col" && col===g.unitIndex) || 
                            (g.unitType==="block" && currentBlock===g.unitIndex);
             
-            // BUG FIX: Pointing Logic (Check if group is entirely within this cell's block)
             let groupBlocks = [...new Set(g.cells.map(k => {
                 let [r,c] = k.split("-").map(Number);
                 return Math.floor(r/3)*3 + Math.floor(c/3);
@@ -216,13 +228,16 @@ function getCandidates(board,row,col){
     return list;
 }
 
-function updateUI(board){
+function updateUI(board, meta){
     document.querySelectorAll(".lock-badge").forEach(e=>e.remove());
     for(let r=0;r<9;r++){
         for(let c=0;c<9;c++){
             let cell=getCell(r,c);
-            if(board[r][c]!==0) createBigInput(cell,r,c,board[r][c],true);
-            else createMiniGrid(cell,r,c);
+            if(board[r][c]!==0) {
+                createBigInput(cell,r,c,board[r][c], meta[r][c]);
+            } else {
+                createMiniGrid(cell,r,c);
+            }
         }
     }
     digitLocks.forEach(l=>{
@@ -243,13 +258,23 @@ function getCommonUnit(cells){
     return null;
 }
 
-function getBoard(){
+// Track both value and who entered it
+function getBoardData(){
     let board=Array.from({length:9},()=>Array(9).fill(0));
+    let meta=Array.from({length:9},()=>Array(9).fill(null)); 
     document.querySelectorAll(".cell").forEach(cell=>{
         let input=cell.querySelector(".big-input");
-        if(input && input.value!=="") board[cell.dataset.row][cell.dataset.col]=parseInt(input.value);
+        let r = cell.dataset.row, c = cell.dataset.col;
+        if(input && input.value!=="") {
+            board[r][c]=parseInt(input.value);
+            // Detect if this was initial, blue, or auto
+            if(input.classList.contains("initial-input")) meta[r][c] = "initial";
+            else if(input.classList.contains("manual-after-solve")) meta[r][c] = "manual";
+            else if(input.classList.contains("auto-filled")) meta[r][c] = "auto";
+            else meta[r][c] = "initial"; // Default for first run
+        }
     });
-    return board;
+    return {board, meta};
 }
 
 function isValid(board,row,col,num){
@@ -263,22 +288,35 @@ function isValid(board,row,col,num){
     return true;
 }
 
-function createBigInput(wrapper,r,c,value="",auto=false,focus=false){
+function createBigInput(wrapper,r,c,value="", type="initial"){
     wrapper.innerHTML="";
     let input=document.createElement("input");
     input.classList.add("big-input"); input.maxLength=1; input.value=value;
-    if(auto) input.classList.add("auto-filled");
-    input.addEventListener("input", () => { if(input.value && !/[1-9]/.test(input.value)) input.value = ""; });
+    
+    // Apply appropriate class
+    if(type === "auto") input.classList.add("auto-filled");
+    else if(type === "manual") input.classList.add("manual-after-solve");
+    else input.classList.add("initial-input");
+
+    input.addEventListener("input", () => { 
+        if(input.value && !/[1-9]/.test(input.value)) {
+            input.value = "";
+        } else if(input.value !== "") {
+            // New entry logic: if solver has run, make it blue. Otherwise black.
+            input.className = "big-input"; 
+            input.classList.add(solverHasRun ? "manual-after-solve" : "initial-input");
+        }
+    });
+
     input.addEventListener("blur",()=>{ if(input.value==="") createMiniGrid(wrapper,r,c); });
     wrapper.appendChild(input);
-    if(focus) input.focus();
 }
 
 function createMiniGrid(wrapper,r,c){
     wrapper.innerHTML="";
     let mini=document.createElement("div");
     mini.classList.add("mini-grid");
-    let board=getBoard(), cand=getCandidates(board,r,c);
+    let data=getBoardData(), cand=getCandidates(data.board,r,c);
     for(let i=1;i<=9;i++){
         let d=document.createElement("div");
         if(cand.includes(i)) d.textContent=i;
