@@ -1,222 +1,102 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Advanced Sudoku Logical Solver</title>
-
+<title>Advanced Sudoku Logical Solver - Fixed</title>
 <style>
-body {
-    font-family: 'Segoe UI', sans-serif;
-    text-align: center;
-    background: #f4f6f8;
-}
-
-#status {
-    font-weight: bold;
-    margin-top: 10px;
-}
-
-#board {
-    display: grid;
-    grid-template-columns: repeat(9, 60px);
-    grid-template-rows: repeat(9, 60px);
-    margin: 20px auto;
-}
-
-.cell {
-    position: relative;
-    border: 1px solid #999;
-    transition: background 0.2s;
-}
-
-.big-input {
-    width: 100%;
-    height: 100%;
-    font-size: 22px;
-    text-align: center;
-    border: none;
-    outline: none;
-}
-
-.mini-grid {
-    display: grid;
-    grid-template-columns: repeat(3,1fr);
-    grid-template-rows: repeat(3,1fr);
-    width:100%;
-    height:100%;
-    font-size:11px;
-    color:#777;
-    cursor:pointer;
-}
-
-.mini-grid div {
-    display:flex;
-    align-items:center;
-    justify-content:center;
-}
-
-.lock-badge {
-    position:absolute;
-    top:2px;
-    right:4px;
-    font-size:10px;
-    font-weight:bold;
-    color:#d35400;
-}
-
-.selected { outline:2px solid orange; }
-
-.right-border { border-right:3px solid black; }
-.bottom-border { border-bottom:3px solid black; }
-.top-border { border-top:3px solid black; }
-.left-border { border-left:3px solid black; }
-
-.auto-filled { color:green; font-weight:bold; }
-
-button {
-    padding:10px 18px;
-    margin:5px;
-    font-size:15px;
-    border:none;
-    border-radius:5px;
-    cursor:pointer;
-    background:#007bff;
-    color:white;
-}
-
-button:hover { background:#0056b3; }
-
-.active-group { background:#8e44ad !important; }
-.active-lock { background:#e67e22 !important; }
-
+    body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #f4f6f8; }
+    #status { font-weight: bold; margin-top: 10px; }
+    #board { display: grid; grid-template-columns: repeat(9, 60px); grid-template-rows: repeat(9, 60px); margin: 20px auto; width: 540px; }
+    .cell { position: relative; border: 1px solid #999; transition: background 0.2s; background: white; }
+    .big-input { width: 100%; height: 100%; font-size: 22px; text-align: center; border: none; outline: none; background: transparent; }
+    .mini-grid { display: grid; grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr); width:100%; height:100%; font-size:11px; color:#777; cursor:pointer; }
+    .mini-grid div { display:flex; align-items:center; justify-content:center; }
+    .lock-badge { position:absolute; top:2px; right:4px; font-size:10px; font-weight:bold; color:#d35400; }
+    .selected { outline:3px solid orange; z-index: 10; }
+    .right-border { border-right:3px solid black; }
+    .bottom-border { border-bottom:3px solid black; }
+    .top-border { border-top:3px solid black; }
+    .left-border { border-left:3px solid black; }
+    .auto-filled { color:green; font-weight:bold; }
+    button { padding:10px 18px; margin:5px; font-size:15px; border:none; border-radius:5px; cursor:pointer; background:#007bff; color:white; }
+    button:hover { background:#0056b3; }
+    .active-group { background:#8e44ad !important; }
+    .active-lock { background:#e67e22 !important; }
 </style>
 </head>
-
 <body>
 
 <h2>Advanced Sudoku Logical Solver</h2>
 <div id="status">Mode: Normal</div>
 
-<button onclick="createBoard()">Input</button>
-<button onclick="solveSudoku()">Run / Re-Run</button>
+<button onclick="createBoard()">Reset Board</button>
+<button onclick="solveSudoku()">Run Solver</button>
 <button id="groupBtn" onclick="toggleGroupMode()">Group Mode</button>
 <button onclick="confirmGroup()">Confirm Group</button>
 <button id="lockBtn" onclick="toggleLockMode()">Digit Lock Mode</button>
 <button onclick="confirmLock()">Confirm Digit Lock</button>
-<button onclick="clearBoard()">Clear</button>
+<button onclick="clearBoard()">Clear All</button>
 
 <div id="board"></div>
 
 <script>
-
 let miniMode=false;
 let groupMode=false;
 let lockMode=false;
-
 let selectedCells=[];
 let manualGroups=[];
 let digitLocks=[];
-
-let pastelColors=[
-"#fde2e2","#e2f0fd","#e2fde9","#fff5d1",
-"#f0e2fd","#e2fdf7","#ffe2f7","#eafde2"
-];
+let pastelColors=["#fde2e2","#e2f0fd","#e2fde9","#fff5d1","#f0e2fd","#e2fdf7","#ffe2f7","#eafde2"];
 let colorIndex=0;
-
-/* ================= MODE UI ================= */
 
 function updateStatus(){
     let status=document.getElementById("status");
     let groupBtn=document.getElementById("groupBtn");
     let lockBtn=document.getElementById("lockBtn");
-
     groupBtn.classList.remove("active-group");
     lockBtn.classList.remove("active-lock");
-
-    if(groupMode){
-        status.innerText="Mode: Group Mode ACTIVE";
-        groupBtn.classList.add("active-group");
-    }else if(lockMode){
-        status.innerText="Mode: Digit Lock Mode ACTIVE";
-        lockBtn.classList.add("active-lock");
-    }else{
-        status.innerText="Mode: Normal";
-    }
+    if(groupMode){ status.innerText="Mode: Group Mode ACTIVE"; groupBtn.classList.add("active-group");
+    }else if(lockMode){ status.innerText="Mode: Digit Lock Mode ACTIVE"; lockBtn.classList.add("active-lock");
+    }else{ status.innerText="Mode: Normal"; }
 }
 
-function toggleGroupMode(){
-    groupMode=!groupMode;
-    lockMode=false;
-    selectedCells=[];
-    clearSelections();
-    updateStatus();
-}
-
-function toggleLockMode(){
-    lockMode=!lockMode;
-    groupMode=false;
-    selectedCells=[];
-    clearSelections();
-    updateStatus();
-}
-
-function clearSelections(){
-    document.querySelectorAll(".cell").forEach(c=>c.classList.remove("selected"));
-}
-
-/* ================= BOARD ================= */
+function toggleGroupMode(){ groupMode=!groupMode; lockMode=false; selectedCells=[]; clearSelections(); updateStatus(); }
+function toggleLockMode(){ lockMode=!lockMode; groupMode=false; selectedCells=[]; clearSelections(); updateStatus(); }
+function clearSelections(){ document.querySelectorAll(".cell").forEach(c=>c.classList.remove("selected")); }
 
 function createBoard(){
-    document.getElementById("board").innerHTML="";
-    manualGroups=[];
-    digitLocks=[];
-    selectedCells=[];
-    colorIndex=0;
-    miniMode=false;
-    groupMode=false;
-    lockMode=false;
+    const boardDiv = document.getElementById("board");
+    boardDiv.innerHTML="";
+    manualGroups=[]; digitLocks=[]; selectedCells=[]; colorIndex=0;
+    miniMode=false; groupMode=false; lockMode=false;
     updateStatus();
 
     for(let r=0;r<9;r++){
         for(let c=0;c<9;c++){
-
             let wrapper=document.createElement("div");
             wrapper.classList.add("cell");
-            wrapper.dataset.row=r;
-            wrapper.dataset.col=c;
-
+            wrapper.dataset.row=r; wrapper.dataset.col=c;
             if(r%3===0) wrapper.classList.add("top-border");
             if(c%3===0) wrapper.classList.add("left-border");
             if((c+1)%3===0) wrapper.classList.add("right-border");
             if((r+1)%3===0) wrapper.classList.add("bottom-border");
 
             wrapper.addEventListener("click",()=>{
-                if(groupMode||lockMode){
-                    toggleSelect(wrapper);
-                }else if(miniMode){
-                    switchToInput(wrapper);
-                }
+                if(groupMode||lockMode) toggleSelect(wrapper);
+                else if(miniMode) switchToInput(wrapper);
             });
-
             createBigInput(wrapper,r,c);
-            board.appendChild(wrapper);
+            boardDiv.appendChild(wrapper);
         }
     }
 }
 
-/* ================= CLICK TO EDIT ================= */
-
 function switchToInput(wrapper){
-    let r=wrapper.dataset.row;
-    let c=wrapper.dataset.col;
-    wrapper.innerHTML="";
+    let r=wrapper.dataset.row, c=wrapper.dataset.col;
     createBigInput(wrapper,r,c,"",false,true);
 }
 
-/* ================= SELECTION ================= */
-
 function toggleSelect(cell){
     let key=cell.dataset.row+"-"+cell.dataset.col;
-
     if(selectedCells.includes(key)){
         selectedCells=selectedCells.filter(x=>x!==key);
         cell.classList.remove("selected");
@@ -226,280 +106,148 @@ function toggleSelect(cell){
     }
 }
 
-/* ================= GROUP ================= */
-
 function confirmGroup(){
-    if(!groupMode) return;
-
-    if(selectedCells.length<2){
-        alert("Select at least 2 cells");
-        return;
-    }
-
+    if(!groupMode || selectedCells.length < 2) return;
     let unit=getCommonUnit(selectedCells);
-    if(!unit){
-        alert("Cells must share same row, column, or block.");
-        return;
-    }
-
-    let digits=prompt("Enter digits (example: 56 or 137)");
+    if(!unit){ alert("Cells must share same row, column, or block."); return; }
+    let digits=prompt("Enter digits (e.g., 17)");
     if(!digits) return;
-
     let arr=[...new Set(digits.split("").map(x=>parseInt(x)))];
-
-    if(arr.length!==selectedCells.length){
-        alert("Digits count must equal number of selected cells.");
-        return;
-    }
-
+    if(arr.length!==selectedCells.length){ alert("Digits count mismatch."); return; }
+    
     let color=pastelColors[colorIndex%pastelColors.length];
     colorIndex++;
-
-    manualGroups.push({
-        cells:[...selectedCells],
-        digits:arr,
-        unitType:unit.type,
-        unitIndex:unit.index,
-        color:color
-    });
-
+    manualGroups.push({ cells:[...selectedCells], digits:arr, unitType:unit.type, unitIndex:unit.index, color:color });
     selectedCells.forEach(k=>{
         let cell=getCellByKey(k);
         cell.style.background=color;
         cell.classList.remove("selected");
     });
-
     selectedCells=[];
     solveSudoku();
 }
 
-/* ================= DIGIT LOCK ================= */
-
 function confirmLock(){
-    if(!lockMode) return;
-
-    if(selectedCells.length<2){
-        alert("Select at least 2 cells");
-        return;
-    }
-
+    if(!lockMode || selectedCells.length < 2) return;
     let unit=getCommonUnit(selectedCells);
-    if(!unit){
-        alert("Cells must share same row, column, or block.");
-        return;
-    }
-
+    if(!unit){ alert("Cells must share same row, column, or block."); return; }
     let digit=parseInt(prompt("Enter single digit (1-9)"));
-    if(!digit || digit<1 || digit>9){
-        alert("Invalid digit");
-        return;
-    }
+    if(!digit || digit<1 || digit>9) return;
 
-    digitLocks.push({
-        digit:digit,
-        cells:[...selectedCells],
-        unitType:unit.type,
-        unitIndex:unit.index
-    });
-
+    digitLocks.push({ digit:digit, cells:[...selectedCells], unitType:unit.type, unitIndex:unit.index });
     selectedCells=[];
     clearSelections();
     solveSudoku();
 }
 
-/* ================= SOLVER (with hidden singles) ================= */
-
 function solveSudoku(){
     miniMode=true;
     let board=getBoard();
     let changed=true;
-
     while(changed){
         changed=false;
-
-        // 1️⃣ Naked Single
+        // Naked Singles
         for(let r=0;r<9;r++){
             for(let c=0;c<9;c++){
                 if(board[r][c]===0){
                     let cand=getCandidates(board,r,c);
-                    if(cand.length===1){
-                        board[r][c]=cand[0];
-                        changed=true;
-                    }
+                    if(cand.length===1){ board[r][c]=cand[0]; changed=true; }
                 }
             }
         }
-
-        // 2️⃣ Hidden Singles
+        // Hidden Singles
         for(let num=1; num<=9; num++){
-            // Rows
-            for(let r=0;r<9;r++){
-                let spots=[];
-                for(let c=0;c<9;c++){
-                    if(board[r][c]===0 &&
-                       getCandidates(board,r,c).includes(num)){
-                        spots.push(c);
-                    }
+            for(let i=0; i<9; i++){
+                let rSpots=[], cSpots=[], bSpots=[];
+                for(let j=0; j<9; j++){
+                    if(board[i][j]===0 && getCandidates(board,i,j).includes(num)) rSpots.push(j);
+                    if(board[j][i]===0 && getCandidates(board,j,i).includes(num)) cSpots.push(j);
+                    let br=Math.floor(i/3)*3 + Math.floor(j/3), bc=(i%3)*3 + (j%3);
+                    if(board[br][bc]===0 && getCandidates(board,br,bc).includes(num)) bSpots.push([br,bc]);
                 }
-                if(spots.length===1){
-                    board[r][spots[0]]=num;
-                    changed=true;
-                }
-            }
-
-            // Columns
-            for(let c=0;c<9;c++){
-                let spots=[];
-                for(let r=0;r<9;r++){
-                    if(board[r][c]===0 &&
-                       getCandidates(board,r,c).includes(num)){
-                        spots.push(r);
-                    }
-                }
-                if(spots.length===1){
-                    board[spots[0]][c]=num;
-                    changed=true;
-                }
-            }
-
-            // Blocks
-            for(let br=0;br<3;br++){
-                for(let bc=0;bc<3;bc++){
-                    let spots=[];
-                    for(let r=br*3;r<br*3+3;r++){
-                        for(let c=bc*3;c<bc*3+3;c++){
-                            if(board[r][c]===0 &&
-                               getCandidates(board,r,c).includes(num)){
-                                spots.push([r,c]);
-                            }
-                        }
-                    }
-                    if(spots.length===1){
-                        let [rr,cc]=spots[0];
-                        board[rr][cc]=num;
-                        changed=true;
-                    }
-                }
+                if(rSpots.length===1){ board[i][rSpots[0]]=num; changed=true; }
+                if(cSpots.length===1){ board[cSpots[0]][i]=num; changed=true; }
+                if(bSpots.length===1){ board[bSpots[0][0]][bSpots[0][1]]=num; changed=true; }
             }
         }
     }
-
     updateUI(board);
 }
 
-/* ================= CANDIDATES ================= */
-
 function getCandidates(board,row,col){
-
     let list=[];
-    for(let n=1;n<=9;n++){
-        if(isValid(board,row,col,n))
-            list.push(n);
-    }
-
+    for(let n=1;n<=9;n++) if(isValid(board,row,col,n)) list.push(n);
     let key=row+"-"+col;
+    let currentBlock = Math.floor(row/3)*3 + Math.floor(col/3);
 
     manualGroups.forEach(g=>{
         if(g.cells.includes(key)){
             list=list.filter(x=>g.digits.includes(x));
-        }else if(
-          (g.unitType==="row" && row===g.unitIndex)||
-          (g.unitType==="col" && col===g.unitIndex)||
-          (g.unitType==="block" &&
-           Math.floor(row/3)*3+Math.floor(col/3)===g.unitIndex)
-        ){
-            list=list.filter(x=>!g.digits.includes(x));
+        } else {
+            // Check primary unit
+            let sameUnit = (g.unitType==="row" && row===g.unitIndex) || 
+                           (g.unitType==="col" && col===g.unitIndex) || 
+                           (g.unitType==="block" && currentBlock===g.unitIndex);
+            
+            // BUG FIX: Pointing Logic (Check if group is entirely within this cell's block)
+            let groupBlocks = [...new Set(g.cells.map(k => {
+                let [r,c] = k.split("-").map(Number);
+                return Math.floor(r/3)*3 + Math.floor(c/3);
+            }))];
+            let inGroupBlock = (groupBlocks.length === 1 && groupBlocks[0] === currentBlock);
+
+            if(sameUnit || inGroupBlock) list=list.filter(x=>!g.digits.includes(x));
         }
     });
 
     digitLocks.forEach(l=>{
+        let sameUnit = (l.unitType==="row" && row===l.unitIndex) || 
+                       (l.unitType==="col" && col===l.unitIndex) || 
+                       (l.unitType==="block" && currentBlock===l.unitIndex);
 
-        let sameUnit =
-          (l.unitType==="row" && row===l.unitIndex)||
-          (l.unitType==="col" && col===l.unitIndex)||
-          (l.unitType==="block" &&
-           Math.floor(row/3)*3+Math.floor(col/3)===l.unitIndex);
+        let lockBlocks = [...new Set(l.cells.map(k => {
+            let [r,c] = k.split("-").map(Number);
+            return Math.floor(r/3)*3 + Math.floor(c/3);
+        }))];
+        let inLockBlock = (lockBlocks.length === 1 && lockBlocks[0] === currentBlock);
 
-        if(sameUnit){
-            if(!l.cells.includes(key))
-                list=list.filter(x=>x!==l.digit);
-        }
-
-        // Remove from block if all locked cells share same block
-        let blockIndex=Math.floor(row/3)*3+Math.floor(col/3);
-
-        let lockedBlocks=l.cells.map(k=>{
-            let [rr,cc]=k.split("-").map(Number);
-            return Math.floor(rr/3)*3+Math.floor(cc/3);
-        });
-
-        let uniqueBlock=[...new Set(lockedBlocks)];
-
-        if(uniqueBlock.length===1){
-            let lockedBlock=uniqueBlock[0];
-
-            if(blockIndex===lockedBlock && !l.cells.includes(key)){
-                list=list.filter(x=>x!==l.digit);
-            }
-        }
+        if((sameUnit || inLockBlock) && !l.cells.includes(key)) list=list.filter(x=>x!==l.digit);
     });
-
     return list;
 }
 
-/* ================= UI ================= */
-
 function updateUI(board){
-
     document.querySelectorAll(".lock-badge").forEach(e=>e.remove());
-
     for(let r=0;r<9;r++){
         for(let c=0;c<9;c++){
             let cell=getCell(r,c);
-
-            if(board[r][c]!==0){
-                createBigInput(cell,r,c,board[r][c],true);
-            }else{
-                createMiniGrid(cell,r,c);
-            }
+            if(board[r][c]!==0) createBigInput(cell,r,c,board[r][c],true);
+            else createMiniGrid(cell,r,c);
         }
     }
-
     digitLocks.forEach(l=>{
         l.cells.forEach(k=>{
-            let cell=getCellByKey(k);
-            let badge=document.createElement("div");
-            badge.classList.add("lock-badge");
-            badge.innerText="🔒"+l.digit;
+            let cell=getCellByKey(k), badge=document.createElement("div");
+            badge.classList.add("lock-badge"); badge.innerText="🔒"+l.digit;
             cell.appendChild(badge);
         });
     });
 }
 
-/* ================= HELPERS ================= */
-
 function getCommonUnit(cells){
-    let rows=cells.map(k=>parseInt(k.split("-")[0]));
-    let cols=cells.map(k=>parseInt(k.split("-")[1]));
-    let blocks=cells.map(k=>{
-        let r=parseInt(k.split("-")[0]);
-        let c=parseInt(k.split("-")[1]);
-        return Math.floor(r/3)*3+Math.floor(c/3);
-    });
-
-    if(rows.every(x=>x===rows[0])) return {type:"row",index:rows[0]};
-    if(cols.every(x=>x===cols[0])) return {type:"col",index:cols[0]};
-    if(blocks.every(x=>x===blocks[0])) return {type:"block",index:blocks[0]};
+    let rArr=cells.map(k=>parseInt(k.split("-")[0])), cArr=cells.map(k=>parseInt(k.split("-")[1]));
+    let bArr=cells.map(k=>{ let [r,c]=k.split("-").map(Number); return Math.floor(r/3)*3+Math.floor(c/3); });
+    if(rArr.every(x=>x===rArr[0])) return {type:"row",index:rArr[0]};
+    if(cArr.every(x=>x===cArr[0])) return {type:"col",index:cArr[0]};
+    if(bArr.every(x=>x===bArr[0])) return {type:"block",index:bArr[0]};
     return null;
 }
 
 function getBoard(){
     let board=Array.from({length:9},()=>Array(9).fill(0));
     document.querySelectorAll(".cell").forEach(cell=>{
-        let input=cell.querySelector("input");
-        if(input && input.value!==""){
-            board[cell.dataset.row][cell.dataset.col]=parseInt(input.value);
-        }
+        let input=cell.querySelector(".big-input");
+        if(input && input.value!=="") board[cell.dataset.row][cell.dataset.col]=parseInt(input.value);
     });
     return board;
 }
@@ -509,29 +257,19 @@ function isValid(board,row,col,num){
         if(i!==col && board[row][i]===num) return false;
         if(i!==row && board[i][col]===num) return false;
     }
-    let sr=Math.floor(row/3)*3;
-    let sc=Math.floor(col/3)*3;
-    for(let r=sr;r<sr+3;r++)
-        for(let c=sc;c<sc+3;c++)
-            if((r!==row||c!==col)&&board[r][c]===num)
-                return false;
+    let sr=Math.floor(row/3)*3, sc=Math.floor(col/3)*3;
+    for(let r=sr;r<sr+3;r++) for(let c=sc;c<sc+3;c++)
+        if((r!==row||c!==col)&&board[r][c]===num) return false;
     return true;
 }
 
 function createBigInput(wrapper,r,c,value="",auto=false,focus=false){
     wrapper.innerHTML="";
     let input=document.createElement("input");
-    input.classList.add("big-input");
-    input.maxLength=1;
-    input.value=value;
+    input.classList.add("big-input"); input.maxLength=1; input.value=value;
     if(auto) input.classList.add("auto-filled");
-
-    input.addEventListener("blur",()=>{
-        if(input.value===""){
-            createMiniGrid(wrapper,r,c);
-        }
-    });
-
+    input.addEventListener("input", () => { if(input.value && !/[1-9]/.test(input.value)) input.value = ""; });
+    input.addEventListener("blur",()=>{ if(input.value==="") createMiniGrid(wrapper,r,c); });
     wrapper.appendChild(input);
     if(focus) input.focus();
 }
@@ -540,8 +278,7 @@ function createMiniGrid(wrapper,r,c){
     wrapper.innerHTML="";
     let mini=document.createElement("div");
     mini.classList.add("mini-grid");
-    let board=getBoard();
-    let cand=getCandidates(board,r,c);
+    let board=getBoard(), cand=getCandidates(board,r,c);
     for(let i=1;i<=9;i++){
         let d=document.createElement("div");
         if(cand.includes(i)) d.textContent=i;
@@ -550,20 +287,11 @@ function createMiniGrid(wrapper,r,c){
     wrapper.appendChild(mini);
 }
 
-function getCell(r,c){
-    return document.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
-}
-function getCellByKey(key){
-    let [r,c]=key.split("-");
-    return getCell(r,c);
-}
-
-function clearBoard(){
-    createBoard();
-}
+function getCell(r,c){ return document.querySelector(`.cell[data-row='${r}'][data-col='${c}']`); }
+function getCellByKey(key){ let [r,c]=key.split("-"); return getCell(r,c); }
+function clearBoard(){ createBoard(); }
 
 createBoard();
-
 </script>
 </body>
 </html>
